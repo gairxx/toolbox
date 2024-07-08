@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# Forensic/Pen-Testing Toolbox Installer
+
+set -e # Exit immediately on any error
+
+# Docker Check
+if ! command -v docker &> /dev/null; then
+  echo "Docker is not installed. Please install Docker and try again."
+  exit 1
+fi
+
+# Define Image Name
+IMAGE_NAME="pentest-toolbox"
+
+# Check for Existing Container and Image
+CONTAINER_EXISTS=$(docker ps -aqf "name=^${IMAGE_NAME}$")
+IMAGE_EXISTS=$(docker images -q $IMAGE_NAME)
+
+# Stop and Remove Existing Container and Image (if exists)
+if [[ -n "$CONTAINER_EXISTS" ]]; then
+  echo "Stopping and removing existing container..."
+  docker stop "$IMAGE_NAME"
+  docker rm "$IMAGE_NAME"
+fi
+
+if [[ -n "$IMAGE_EXISTS" ]]; then
+  echo "Removing existing image..."
+  docker rmi "$IMAGE_NAME"
+fi
+
+# Build Docker Image (Modified for Simplicity)
+cat << EOF | docker build -t "$IMAGE_NAME" -
+FROM kalilinux/kali-rolling
+
+# Add any custom tools not in Kali
+RUN apt update && \
+    apt install -y \
+        shellinabox \
+        python3-pip
+
+# Install Python Tools
+RUN pip3 install pwntools volatility3 yara-python scapy requests beautifulsoup4 python-nmap dnspython paramiko impacket
+
+# Configure Shellinabox
+RUN sed -i 's/#SHELLINABOX_DAEMON_OPTS=/SHELLINABOX_DAEMON_OPTS="-t -s /:SSH:localhost"' /etc/default/shellinabox
+
+# Expose Ports
+EXPOSE 80 4200
+
+# Start Services
+CMD service ssh start && service shellinabox start
+EOF
+
+
+# Run Docker Container
+docker run -it -p 80:80 -p 4200:4200 --name "$IMAGE_NAME" "$IMAGE_NAME"
+
+echo "The Pen-Testing Toolbox is now running. Access the web shell at http://localhost:4200"
